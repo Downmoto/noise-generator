@@ -1,0 +1,18 @@
+{
+  "name": "noise-generator",
+  "version": "1.0.0",
+  "description": "create 2D array of noise",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "Noise"
+  ],
+  "author": "Arad Fadaei",
+  "license": "ISC",
+  "devDependencies": {
+    "jest": "^29.3.1"
+  }
+}
