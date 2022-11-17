@@ -1,81 +1,71 @@
+const { hasher, prng } = require("./externals");
 
+class Noise {
+  // https://en.wikipedia.org/wiki/Perlin_noise
+  // https://joeiddon.github.io/projects/javascript/perlin.html
+  constructor(seed) {
+    this.gradients = {};
 
-
-function generate2DZeroArray(xlength, ylength) {
-  let arr = new Array(ylength);
-
-  for (let i = 0; i < ylength; i++) {
-    arr[i] = new Array(xlength).fill(0);
-  }
-
-  return arr;
-}
-
-function scatterMaxValueInArray(arr, maxValue, points) {
-  var count = 0;
-
-  while (count < points) {
-    for (var y = 0; y < arr.length; y++) {
-      for (var x = 0; x < arr[y].length; x++) {
-        let rand = Math.floor(Math.random() * 100);
-
-        if (rand <= 1) {
-          if (arr[y][x] != maxValue) {
-            arr[y][x] = maxValue;
-            count++;
-            if (count == points) return;
-          }
-        }
-      }
+    if (seed) {
+      let s = hasher(seed.toString());
+      this.rand = prng(s[0], s[1], s[2], s[3]);
+    } else {
+      this.rand = Math.random;
     }
   }
-}
 
-function generateNoise(arr, iterations = 9) {
-  if (iterations > 9) {
-    iterations = 9;
-  } else if (iterations < 1) {
-    iterations = 1;
+  #randomGradient() {
+    let theta = this.rand() * 2 * Math.PI;
+    return { x: Math.cos(theta), y: Math.sin(theta) };
   }
 
-  let offsetx = [0, 1, 1, 1, 0, -1, -1, -1];
-  let offsety = [-1, -1, 0, 1, 1, 1, 0, -1];
+  #interpolate(a0, a1, w) {
+    if (0.0 > w) return a0;
+    if (1.0 < w) return a1;
 
-  let points = Math.floor((arr.length * arr[0].length) / 10);
-  scatterMaxValueInArray(arr, 1, points);
+    return (a1 - a0) * ((w * (w * 6.0 - 15.0) + 10.0) * w * w * w) + a0;
+  }
 
-  for (let iter = 0; iter < iterations; iter++) {
-    for (var y = 0; y < arr.length; y++) {
-      for (var x = 0; x < arr[y].length; x++) {
+  #dotGridGradient(ix, iy, x, y) {
+    let gradient = this.#randomGradient()
+    let dx = x - ix;
+    let dy = y - iy;
 
-        for (var i = 0; i < 8; i++) {
-          let nx = x + offsetx[i];
-          let ny = y + offsety[i];
-
-          if (
-            nx < 0 ||
-            nx > arr[y].length - 1 ||
-            ny < 0 ||
-            ny > arr.length - 1
-          ) {
-            continue;
-          }
-
-          if (arr[y][x] > 0 && arr[ny][nx] < arr[y][x]) {
-            arr[ny][nx] = arr[y][x] / 2
-          }
-        }
-      }
+    if (this.gradients[[ix, iy]]) {
+      gradient = this.gradients[[ix, iy]];
+    } else {
+      this.gradients[[ix, iy]] = gradient;
     }
+
+    return dx * gradient.x + dy * gradient.y;
+  }
+
+  perlin(x, y) {
+    let x0 = Math.floor(x);
+    let x1 = x0 + 1;
+    let y0 = Math.floor(y);
+    let y1 = y0 + 1;
+
+    let sx = x - x0;
+    let sy = y - y0;
+
+    let n0, n1, ix0, ix1, value;
+
+    n0 = this.#dotGridGradient(x0, y0, x, y);
+    n1 = this.#dotGridGradient(x1, y0, x, y);
+    ix0 = this.#interpolate(n0, n1, sx);
+
+    n0 = this.#dotGridGradient(x0, y1, x, y);
+    n1 = this.#dotGridGradient(x1, y1, x, y);
+    ix1 = this.#interpolate(n0, n1, sx);
+
+    value = this.#interpolate(ix0, ix1, sy);
+    return value * 0.5 + 0.5;
+  }
+
+  static() {
+    return this.rand();
   }
 }
 
-let array = generate2DZeroArray(10, 10);
-generateNoise(array, 1, 5);
-
-array.forEach((v) => console.log(...v));
-
-module.exports = {
-  generate2DZeroArray,
-  generateNoise,
-};
+module.exports = Noise;
