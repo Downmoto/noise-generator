@@ -1,0 +1,205 @@
+<html>
+  <head>
+    <script>
+      function cyrb128(str) {
+        let h1 = 1779033703,
+          h2 = 3144134277,
+          h3 = 1013904242,
+          h4 = 2773480762;
+        for (let i = 0, k; i < str.length; i++) {
+          k = str.charCodeAt(i);
+          h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+          h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+          h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+          h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+        }
+        h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+        h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+        h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+        h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+        return [
+          (h1 ^ h2 ^ h3 ^ h4) >>> 0,
+          (h2 ^ h1) >>> 0,
+          (h3 ^ h1) >>> 0,
+          (h4 ^ h1) >>> 0,
+        ];
+      }
+
+      function sfc32(a, b, c, d) {
+        return function () {
+          a >>>= 0;
+          b >>>= 0;
+          c >>>= 0;
+          d >>>= 0;
+          var t = (a + b) | 0;
+          a = b ^ (b >>> 9);
+          b = (c + (c << 3)) | 0;
+          c = (c << 21) | (c >>> 11);
+          d = (d + 1) | 0;
+          t = (t + d) | 0;
+          c = (c + t) | 0;
+          return (t >>> 0) / 4294967296;
+        };
+      }
+
+      class Noise {
+        constructor(seed) {
+          this.memory = {};
+          this.gradients = {};
+
+          if (seed) {
+            let s = cyrb128(seed.toString());
+            this.rand = sfc32(s[0], s[1], s[2], s[3]);
+          } else {
+            this.rand = Math.random;
+          }
+        }
+
+        #randomGradient() {
+          let theta = this.rand() * 2 * Math.PI;
+          return { x: Math.cos(theta), y: Math.sin(theta) };
+        }
+
+        #interpolate(a0, a1, w) {
+          if (0.0 > w) return a0;
+          if (1.0 < w) return a1;
+
+          return (a1 - a0) * ((w * (w * 6.0 - 15.0) + 10.0) * w * w * w) + a0;
+        }
+
+        #dotGridGradient(ix, iy, x, y) {
+          let gradient = this.#randomGradient();
+          let dx = x - ix;
+          let dy = y - iy;
+
+          if (this.gradients[[ix, iy]]) {
+            gradient = this.gradients[[ix, iy]];
+          } else {
+            this.gradients[[ix, iy]] = gradient;
+          }
+
+          return dx * gradient.x + dy * gradient.y;
+        }
+
+        perlin(x, y) {
+          if (this.memory.hasOwnProperty([x, y])) return this.memory([x, y]);
+          let x0 = Math.floor(x);
+          let x1 = x0 + 1;
+          let y0 = Math.floor(y);
+          let y1 = y0 + 1;
+
+          let sx = x - x0;
+          let sy = y - y0;
+
+          let n0, n1, ix0, ix1, value;
+
+          n0 = this.#dotGridGradient(x0, y0, x, y);
+          n1 = this.#dotGridGradient(x1, y0, x, y);
+          ix0 = this.#interpolate(n0, n1, sx);
+
+          n0 = this.#dotGridGradient(x0, y1, x, y);
+          n1 = this.#dotGridGradient(x1, y1, x, y);
+          ix1 = this.#interpolate(n0, n1, sx);
+
+          value = this.#interpolate(ix0, ix1, sy);
+          this.memory[[x, y]] = value;
+
+          return value + 0.5 + 0.5;
+        }
+
+        static() {
+          return this.rand();
+        }
+      }
+    </script>
+
+    <style>
+      body {
+        width: 100%;
+        text-align: center;
+        color: white;
+      }
+      #controls {
+        margin: auto;
+      }
+
+      .container {
+        width: 100%;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div id="canvas">
+        <canvas id="cnvs"></canvas>
+        <canvas id="cnvs2"></canvas>
+      </div>
+      <br />
+      <div id="controls">
+        <input type="text" placeholder="seed" id="seed" />
+        <button id="btn">Regenerate</button>
+        <select id="myRange">
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="150">150</option>
+          <option value="200">200</option>
+          <option value="250" selected>250</option>
+        </select>
+      </div>
+    </div>
+    <script>
+      "use strict";
+      const H = 400;
+      let cnvs = document.getElementById("cnvs");
+      cnvs.width = cnvs.height = H;
+      let ctx = cnvs.getContext("2d");
+
+      let cnvs2 = document.getElementById("cnvs2");
+      cnvs2.width = cnvs2.height = H;
+      let ctx2 = cnvs2.getContext("2d");
+
+      const GRID_SIZE = 4;
+      const RESOLUTION = 64;
+      let COLOR_SCALE = 250;
+
+      let pixel_size = cnvs.width / RESOLUTION;
+      let num_pixels = GRID_SIZE / RESOLUTION;
+
+      function gen(seed) {
+        let noise = new Noise(seed);
+        for (let y = 0; y < GRID_SIZE; y += num_pixels / GRID_SIZE) {
+          for (let x = 0; x < GRID_SIZE; x += num_pixels / GRID_SIZE) {
+            let v = parseInt(noise.perlin(x, y) * COLOR_SCALE);
+            ctx.fillStyle = "hsl(" + v + ",50%,50%)";
+            ctx.fillRect(
+              (x / GRID_SIZE) * cnvs.width,
+              (y / GRID_SIZE) * cnvs.width,
+              pixel_size,
+              pixel_size
+            );
+            let v2 = parseInt(noise.static(x, y) * COLOR_SCALE);
+            ctx2.fillStyle = "hsl(" + v2 + ",50%,50%)";
+            ctx2.fillRect(
+              (x / GRID_SIZE) * cnvs2.width,
+              (y / GRID_SIZE) * cnvs2.width,
+              pixel_size,
+              pixel_size
+            );
+          }
+        }
+      }
+
+      let seed = document.getElementById("seed");
+      document.getElementById("btn").addEventListener("click", () => {
+        gen(seed.value);
+      });
+      document.getElementById("myRange").oninput = (e) => {
+        COLOR_SCALE = e.target.value;
+        gen(seed.value);
+      };
+
+      gen(seed.value);
+    </script>
+  </body>
+</html>
