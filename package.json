@@ -11,7 +11,7 @@
     "Noise"
   ],
   "author": "Arad Fadaei",
-  "license": "ISC",
+  "license": "MIT",
   "devDependencies": {
     "jest": "^29.3.1"
   }
